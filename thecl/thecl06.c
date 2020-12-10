@@ -95,28 +95,28 @@ th08_value_from_data(
         return value_from_data(data, data_length, 's', value);
     } else if (type == 'o' || type == 'N') {
         return value_from_data(data, data_length, 'S', value);
-    } else if (type == 'm') {
+    } else if (type == 'm' || type == 'M') {
         int ret;
         value_t temp;
         switch (data_length) {
         case 224:
-            ret = value_from_data(data, 48, type, &temp);
+            ret = value_from_data(data, 48, 'm', &temp);
             util_xor(temp.val.m.data, 48, 0xaa, 0, 0);
             break;
         case 176:
-            ret = value_from_data(data, 48, type, &temp);
+            ret = value_from_data(data, 48, 'm', &temp);
             util_xor(temp.val.m.data, 48, 0xbb, 0, 0);
             break;
         case 128:
-            ret = value_from_data(data, 64, type, &temp);
+            ret = value_from_data(data, 64, 'm', &temp);
             util_xor(temp.val.m.data, 64, 0xdd, 0, 0);
             break;
         case 64:
-            ret = value_from_data(data, 64, type, &temp);
+            ret = value_from_data(data, 64, 'm', &temp);
             util_xor(temp.val.m.data, 64, 0xee, 0, 0);
             break;
         default:
-            ret = value_from_data(data, data_length, type, &temp);
+            ret = value_from_data(data, data_length, 'm', &temp);
             break;
         }
         value->type = 'z';
@@ -395,7 +395,7 @@ static const id_format_pair_t th06_fmts[] = {
     { 90, "Sfff" },
     { 91, "S" },
     { 92, "S" },
-    { 93, "ssz" },
+    { 93, "ssZ" },
     { 94, "" },
     { 95, "NfffssS" },
     { 96, "" },
@@ -438,6 +438,11 @@ static const id_format_pair_t th06_fmts[] = {
     { 133, "" },
     { 134, "" },
     { 135, "S" },
+};
+
+static const id_format_pair_t th06_string_lengths[] = {
+    { 93, "34" },
+    { 0, 0 }
 };
 
 static const id_format_pair_t th07_fmts[] = {
@@ -597,6 +602,11 @@ static const id_format_pair_t th07_fmts[] = {
     { 0, 0 },
 };
 
+static const id_format_pair_t th07_string_lengths[] = {
+    { 90, "48^aa" },
+    { 0, 0 }
+};
+
 static const id_format_pair_t th08_fmts[] = {
     { 0, "" },
     { 1, "" },
@@ -706,7 +716,7 @@ static const id_format_pair_t th08_fmts[] = {
     { 119, "Sfff" },
     { 120, "S" },
     { 121, "S" },
-    { 122, "ssSmmmm" },
+    { 122, "ssSMMMM" },
     { 123, "" },
     { 124, "S" },
     { 126, "SS" },
@@ -752,6 +762,11 @@ static const id_format_pair_t th08_fmts[] = {
     { 183, "S" },
     { 184, "S" },
     { 0, 0 },
+};
+
+static const id_format_pair_t th08_string_lengths[] = {
+    { 122, "48^aa,48^bb,64^dd,64^ee" },
+    { 0, 0 }
 };
 
 static const id_format_pair_t th09_fmts[] = {
@@ -811,6 +826,43 @@ static const id_format_pair_t th95_fmts[] = {
     { 155, "SSfffSSSSffff" },
     { 157, "SSfffSSSSfSff" },
     { 0, 0 },
+};
+
+static const id_format_pair_t th95_string_lengths[] = {
+    { 104, "48^aa" },
+    { 0, 0 }
+};
+
+static const char*
+th06_find_string_lengths(
+    unsigned int version,
+    unsigned int id)
+{
+    seqmap_entry_t *ent = seqmap_get(g_eclmap->ins_strings, id);
+    if (ent)
+        return ent->value;
+
+    const char* ret = NULL;
+
+    switch (version) {
+    case 95:
+        if (!ret) ret = find_format(th95_string_lengths, id);
+    case 9:
+    case 8:
+        if (!ret) ret = find_format(th08_string_lengths, id);
+        break;
+    case 7:
+        if (!ret) ret = find_format(th07_string_lengths, id);
+        break;
+    case 6:
+        if (!ret) ret = find_format(th06_string_lengths, id);
+        break;
+    default:
+        fprintf(stderr, "%s: unsupported version: %u\n", argv0, version);
+        return NULL;
+    }
+
+    return ret;
 };
 
 static const char*
@@ -987,6 +1039,8 @@ th06_open(
             instr->offset = (ptrdiff_t)raw_instr - (ptrdiff_t)raw_sub;
 
             const char* format;
+
+            char* string_format;
 
             if (raw_instr->id == 0)
                 format = "";
@@ -1299,26 +1353,23 @@ th06_instr_size(
 
     size_t ret = sizeof(th06_instr_t);
 
-    if        (version ==  6 && instr->id ==  93) {
-        return ret + 4 + 34;
-    } else if (version ==  7 && instr->id ==  90) {
-        return ret + 4 + 48;
-    } else if (version ==  8 && instr->id == 122) {
-        return ret + 4 + 4 + 48 + 48 + 64 + 64;
-    } else if (version == 95 && instr->id == 104) {
-        return ret + 48;
-    } else {
-        thecl_param_t* param;
-        list_for_each(&instr->params, param) {
-            if (param->type == 'n') {
-                ret += sizeof(uint16_t);
-            } else if (param->type == 'o' || param->type == 'N')  {
-                ret += sizeof(uint32_t);
-            } else {
-                value_t v = param->value;
-                v.type = param->type;
-                ret += value_size(&v);
-            }
+    size_t hardcoded_string_param = 0;
+    thecl_param_t* param;
+    list_for_each(&instr->params, param) {
+        if (param->type == 'n') {
+            ret += sizeof(uint16_t);
+        } else if (param->type == 'o' || param->type == 'N') {
+            ret += sizeof(uint32_t);
+        } else if (param->type == 'z') {
+            value_t v = param->value;
+            v.type = 'Z';
+            ret += value_size(&v);
+        //} else if (param->type == 'm') {
+
+        } else {
+            value_t v = param->value;
+            v.type = param->type;
+            ret += value_size(&v);
         }
     }
 
@@ -1353,6 +1404,7 @@ th06_parse(
     state.ecl = thecl_new();
     state.ecl->version = version;
     state.instr_format = th06_find_format;
+    state.string_lengths = th06_find_string_lengths;
     state.instr_size = th06_instr_size;
     
     state.path_cnt = 0;
@@ -1445,34 +1497,6 @@ th06_instr_serialize(
             uint32_t label = label_offset(sub, param->value.val.z) - instr->offset;
             memcpy(param_data, &label, sizeof(uint32_t));
             param_data += sizeof(uint32_t);
-        } else if (param->value.type == 'z') {
-            if (ecl->version == 6) {
-                memset(param_data, 0, 34);
-                strncpy((char*)param_data, param->value.val.z, 34);
-                param_data += 34;
-            } else if (ecl->version == 7 || ecl->version == 95) {
-                memset(param_data, 0, 48);
-                strncpy((char*)param_data, param->value.val.z, 48);
-                util_xor(param_data, 48, 0xaa, 0, 0);
-                param_data += 48;
-            } else if (ecl->version == 8) {
-                switch (param_count) {
-                case 4:
-                case 5:
-                    memset(param_data, 0, 48);
-                    strncpy((char*)param_data, param->value.val.z, 48);
-                    util_xor(param_data, 48, param_count == 4 ? 0xaa : 0xbb, 0, 0);
-                    param_data += 48;
-                    break;
-                case 6:
-                case 7:
-                    memset(param_data, 0, 64);
-                    strncpy((char*)param_data, param->value.val.z, 64);
-                    util_xor(param_data, 64, param_count == 6 ? 0xdd : 0xee, 0, 0);
-                    param_data += 64;
-                    break;
-                }
-            }
         } else {
             value_t v = param->value;
             v.type = param->type;

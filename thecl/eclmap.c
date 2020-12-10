@@ -45,6 +45,7 @@ eclmap_new()
         map->ins_names = seqmap_new();
         map->ins_signatures = seqmap_new();
         map->ins_rets = seqmap_new();
+        map->ins_strings = seqmap_new();
         map->gvar_names = seqmap_new();
         map->gvar_types = seqmap_new();
         map->timeline_ins_names = seqmap_new();
@@ -63,6 +64,7 @@ eclmap_free(
         seqmap_free(map->ins_names);
         seqmap_free(map->ins_signatures);
         seqmap_free(map->ins_rets);
+        seqmap_free(map->ins_strings);
         seqmap_free(map->gvar_names);
         seqmap_free(map->gvar_types);
         seqmap_free(map->timeline_ins_names);
@@ -93,6 +95,9 @@ control(
         state->ident = 0;
     } else if (!strcmp(cline, "!ins_rets")) {
         state->smap = state->emap->ins_rets;
+        state->ident = 0;
+    } else if (!strcmp(cline, "!ins_strings")) {
+        state->smap = state->emap->ins_strings;
         state->ident = 0;
     } else if (!strcmp(cline, "!gvar_names")) {
         state->smap = state->emap->gvar_names;

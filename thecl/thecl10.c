@@ -1003,6 +1003,19 @@ static const id_format_pair_t th17_fmts[] = {
 /* NEWHU: */
 
 static const char*
+th10_find_string_lengths(
+    unsigned int version,
+    unsigned int id)
+{
+    seqmap_entry_t *ent = seqmap_get(g_eclmap->ins_strings, id);
+    if (ent)
+        return ent->value;
+    //else
+        //fprintf(stderr, "%s: id %d was not found in the string length table\n", argv0, id);
+    return NULL;
+}
+
+static const char*
 th10_find_format(
     unsigned int version,
     unsigned int id,
@@ -1933,6 +1946,7 @@ th10_parse(
     state.ecl = thecl_new();
     state.ecl->version = version;
     state.instr_format = th10_find_format;
+    state.string_lengths = th10_find_string_lengths;
     state.instr_size = th10_instr_size;
 
     state.path_cnt = 0;

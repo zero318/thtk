@@ -82,10 +82,16 @@ value_from_data(
     case 'C':
         READ(C, sizeof(uint32_t));
         break;
+    case 'Z':
+        value->val.Z.length = data_length;
+        value->val.Z.data = malloc(data_length);
+        strncpy(value->val.Z.data, data, data_length);
+        return data_length;
     case 'z':
         value->val.z = malloc(data_length);
         memcpy(value->val.z, data, data_length);
         return data_length;
+    case 'M':
     case 'm':
         value->val.m.length = data_length;
         value->val.m.data = malloc(data_length);
@@ -203,9 +209,14 @@ value_from_text(
         }
         READ(u, value->val.C);
         break;
+    case 'Z':
+        value->val.Z.data = strdup(text);
+        value->val.Z.length = strlen(text);
+        break;
     case 'z':
         value->val.z = strdup(text);
         break;
+    case 'M':
     case 'm': {
         size_t zlen = strlen(text);
         value->val.m.data = malloc(zlen);
@@ -256,9 +267,13 @@ value_to_text(
     case 'S':
         snprintf(temp, 256, "%i", value->val.S);
         break;
+    case 'Z':
+        strncpy(temp, value->val.Z.data, value->val.Z.length);
+        break;
     case 'z':
         snprintf(temp, 256, "%s", value->val.z);
         break;
+    case 'M':
     case 'm':
         memcpy(temp, value->val.m.data, value->val.m.length);
         temp[value->val.m.length] = '\0';
@@ -308,6 +323,15 @@ value_to_data(
         WRITE(S, sizeof(int32_t));
     case 'C':
         WRITE(C, sizeof(uint32_t));
+    case 'Z':
+        if (data_length < value->val.Z.length) {
+            fprintf(stderr, "%s:value_to_data: unexpected end of data, wanted to write %zu bytes for format 'Z'\n", argv0, value->val.Z.length);
+            return -1;
+        }
+        memset(data, '\0', value->val.Z.length);
+        size_t zlen = strlen(value->val.Z.data);
+        strncpy(data, value->val.Z.data, zlen < value->val.Z.length ? zlen : value->val.Z.length);
+        return value->val.Z.length;
     case 'z': {
         size_t zlen = strlen(value->val.z);
         if (data_length < zlen) {
@@ -317,12 +341,20 @@ value_to_data(
         memcpy(data, value->val.z, zlen);
         return zlen;
     }
+    case 'X':
+    case 'M':
     case 'm':
         if (data_length < value->val.m.length) {
             fprintf(stderr, "%s:value_to_data: unexpected end of data, wanted to write %zu bytes for format 'm'\n", argv0, value->val.m.length);
             return -1;
         }
         memcpy(data, value->val.m.data, value->val.m.length);
+        if (value->type != 'm') {
+            if (value->type == 'M')
+                util_xor(data, value->val.M.length, value->val.M.xor, 0, 0);
+            else
+                util_xor(data, value->val.M.length, value->val.M.xor, 7, 16);
+        }
         return value->val.m.length;
     default:
         fprintf(stderr, "%s:value_to_data: invalid type '%c'\n", argv0, value->type);
@@ -355,8 +387,11 @@ value_size(
         return sizeof(int32_t);
     case 'C':
         return sizeof(uint32_t);
+    case 'Z':
+        return value->val.Z.length;
     case 'z':
         return strlen(value->val.z);
+    case 'M':
     case 'm':
         return value->val.m.length;
     default:
@@ -372,7 +407,11 @@ value_free(
     if (value->type == 'z') {
         free(value->val.z);
         value->val.z = NULL;
-    } else if (value->type == 'm') {
+    } else if (value->type == 'Z') {
+        free(value->val.Z.data);
+        value->val.Z.data = NULL;
+        value->val.Z.length = 0;
+    } else if (value->type == 'm' || value->type == 'M') {
         free(value->val.m.data);
         value->val.m.data = NULL;
         value->val.m.length = 0;

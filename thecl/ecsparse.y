@@ -1625,8 +1625,17 @@ instr_set_types(
     if (format == NULL) /* Error message for this is shown somewhere else. */
         return;
 
+    _Bool first_string_call = 1;
+    char* string_lengths = state->string_lengths(state->version, instr->id);
+    if (string_lengths) {
+        string_lengths = strdup(string_lengths);
+    }
+    const char* original_string_lengths = string_lengths; 
+    //seqmap_entry_t* string_lengths = state->string_lengths(state->version, instr->id);
+
     thecl_param_t* param;
     int param_n = 1;
+    int sized_string_params = 0;
     list_for_each(&instr->params, param) {
         int new_type;
         /* XXX: How to check for errors?
@@ -1639,7 +1648,7 @@ instr_set_types(
             new_type = *format;
 
         if (new_type != param->type &&
-            !(param->type == 'z' && (new_type == 'm' || new_type == 'x' || new_type == 'N' || new_type == 'n')) &&
+            !(param->type == 'z' && (new_type == 'Z' || new_type == 'm' || new_type == 'M' || new_type == 'x' || new_type == 'N' || new_type == 'n')) &&
             !(param->type == 'S' && (new_type == 's' || new_type == 'U' || new_type == 't'))
         ) {
             seqmap_entry_t* ent = seqmap_get(g_eclmap->ins_names, instr->id);
@@ -1651,6 +1660,44 @@ instr_set_types(
             yyerror(state, "instr_set_types: in sub %s: wrong argument "
                      "type for parameter %d for opcode %s (expected: %c, got: %c)",
                      state->current_sub->name, param_n, buf, new_type, param->type);
+        } else if (param->type == 'z' && (new_type == 'z' || new_type == 'Z' || new_type == 'M' /*|| new_type == 'm' || new_type == 'X'*/)) {
+            param->value.type = new_type;
+            char* temp;
+            //if (string_lengths && (temp = strtok(first_string_call ? (first_string_call = 0), string_lengths : NULL, ","))) {
+            if (string_lengths && (temp = strtok(string_lengths, ","))) {
+                string_lengths += strlen(temp) + 1;
+                ++sized_string_params;
+                if (new_type == 'z' || new_type == 'Z') {
+                    ssize_t zlen = strtol(temp, NULL, 10);
+                    if (zlen >= 0)
+                        param->value.val.Z.length = zlen;
+                    else //Error about negative string length
+                        param->value.val.Z.length = 0;
+                } else if (new_type == 'm' || new_type == 'M') {
+                    ssize_t mlen = strtol(strtok(temp, "^"), NULL, 10);
+                    param->value.val.M.data = param->value.val.M.length;
+                    if (mlen >= 0)
+                        param->value.val.M.length = mlen;
+                    else //Error about negative string length
+                        param->value.val.M.length = 0;
+                    param->value.val.M.xor = strtol(strtok(NULL, "^"), NULL, 16);
+                }
+            } else {
+                seqmap_entry_t* ent = seqmap_get(g_eclmap->ins_names, instr->id);
+                char buf[128];
+                if (ent == NULL)
+                    snprintf(buf, sizeof(buf), "%d", instr->id);
+                else
+                    snprintf(buf, sizeof(buf), "%d (%s)", instr->id, ent->value);
+                yyerror(state, "instr_set_types: in sub %s: invalid argument "
+                    "for parameter %d, opcode %s %ssupports %d sized string%c",
+                    state->current_sub->name, param_n, buf,
+                    sized_string_params != 0 ? "only " : "",
+                    sized_string_params,
+                    sized_string_params != 1 ? 's' : '\0');
+                param->value.val.Z.length = 0;
+            }
+
         }
 
         param->type = new_type;
@@ -1665,7 +1712,7 @@ instr_set_types(
 
         ++param_n;
     }
-
+    if (original_string_lengths) free(original_string_lengths);
     return;
 }
 

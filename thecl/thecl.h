@@ -251,6 +251,7 @@ typedef struct {
     int path_cnt;
     char** path_stack;
     const char* (*instr_format)(unsigned int version, unsigned int id, bool is_timeline);
+    const char* (*string_lengths)(unsigned int version, unsigned int id);
     size_t (*instr_size)(unsigned int version, const thecl_instr_t* instr, bool is_timeline);
 
     /* Stuff for lexer */
